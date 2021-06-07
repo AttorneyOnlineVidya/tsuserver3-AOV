@@ -102,8 +102,8 @@ def ooc_cmd_cm(client, arg):
     Add a case manager for the current room.
     Usage: /cm <id>
     """
-    if 'CM' not in client.area.evidence_mod and not client.is_mod:
-        raise ClientError('You can\'t become a CM in this area')
+    #if 'CM' not in client.area.evidence_mod and not client.is_mod:
+        #raise ClientError('You can\'t become a CM in this area')
     if len(client.area.owners) == 0:
         if len(arg) > 0:
             raise ArgumentError(
@@ -145,7 +145,16 @@ def ooc_cmd_cm(client, arg):
                 client.send_ooc(
                     f'{id} does not look like a valid ID.')
     else:
-        raise ClientError('You must be authorized to do that.')
+        if client.is_mod:
+            client.area.owners.append(client)
+            if client.area.evidence_mod == 'HiddenCM':
+                client.area.broadcast_evidence_list()
+            client.server.area_manager.send_arup_cms()
+            client.area.broadcast_ooc('{} [{}] is CM in this area now.'.format(
+                client.char_name, client.id))
+            database.log_room('cm.add', client, client.area, target=client, message='self-added')
+        else:
+            raise ClientError('This area already has a CM. You can ask them to add you.')
 
 
 @mod_only(area_owners=True)
@@ -153,7 +162,28 @@ def ooc_cmd_uncm(client, arg):
     """
     Remove a case manager from the current area.
     Usage: /uncm <id>
+    - "*" uncm's everyone in the current area.
+    - "@" uncm's everyone on the server.
     """
+    if client.is_mod:
+        if arg == '*':
+            if len(client.area.owners) > 0:
+                client.area.owners.clear()
+                client.server.area_manager.send_arup_cms()
+                client.area.broadcast_ooc("Area CMs cleared.")
+                database.log_room('cm.clear', client, client.area, target=None)
+                return
+            else:
+                raise ArgumentError('Area has no CMs.')
+        if arg == '@':
+            for _, area in enumerate(client.server.area_manager.areas):
+                if len(area.owners) > 0:
+                    area.owners.clear()
+            client.server.area_manager.send_arup_cms()
+            client.area.broadcast_ooc("Server CMs cleared.")
+            database.log_room('cm.clearAll', client, client.area, target=None)
+            return
+    
     if len(arg) > 0:
         arg = arg.split(' ')
     else:
